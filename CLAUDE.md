@@ -410,17 +410,28 @@ By the end of this project, you should have:
 
 ---
 
-## Stretch Goals (After MVP)
+## Next Steps (After MVP)
 
-Once the core pipeline works, consider:
+### Quick Wins
+- **Multi-region support** — Fetch and forecast for ERCO (Texas), PJM (East Coast), MISO (Midwest) alongside CISO. Most code already supports a `region` parameter.
+- **Weather features** — Add temperature/humidity from Open-Meteo API (free, no key needed). Temperature is the #1 external driver of electricity demand. Join by timestamp + location.
+- **SHAP explanations** — Add per-prediction feature importance via `shap.TreeExplainer` (works out of the box with XGBoost). Surface in API response and Streamlit dashboard.
+- **Calibrated confidence intervals** — Replace fixed-width bands with quantile regression (XGBoost `quantile` objective) or conformal prediction for proper uncertainty quantification.
 
-- **Multi-region forecasting** — predict for 3-5 different grid regions, compare model performance
-- **Probabilistic forecasting** — use quantile regression or conformal prediction for uncertainty bands
-- **Online learning** — implement incremental model updates instead of full retrains
-- **Feature store** — migrate from Parquet to Feast for more sophisticated feature management
-- **Deploy to cloud** — put the API on AWS Lambda or GCP Cloud Run, use S3 for storage
-- **Advanced monitoring** — use Prometheus + Grafana for real-time dashboards
-- **SHAP explanations** — add model interpretability to the API response
+### Medium Effort
+- **Scheduled orchestration** — Wire up Prefect schedules so ingestion runs daily at 6AM UTC and monitoring runs weekly, fully automated.
+- **Automatic retraining trigger** — When drift is detected (already implemented), automatically kick off the training pipeline instead of just logging a warning.
+- **Prediction logging** — Store every API prediction in DuckDB so actual vs predicted accuracy can be computed over time (needed for real production monitoring).
+- **LightGBM comparison** — Add a LightGBM model alongside XGBoost. The infrastructure already supports it — just add `src/models/lightgbm_model.py` and log to MLflow.
+- **API authentication** — Add API key auth or OAuth to the FastAPI endpoints.
+
+### Larger Projects
+- **Cloud deployment** — Deploy the API to AWS Lambda or GCP Cloud Run, use S3 for artifacts, hosted DB for storage.
+- **Prometheus + Grafana** — Replace Evidently HTML reports with real-time metrics dashboards (prediction latency, error rates, drift scores).
+- **Online/incremental learning** — Update the model incrementally as new data arrives instead of full retraining.
+- **Multi-step probabilistic forecasting** — Predict full 24h distribution (not just point estimates) using DeepAR or Temporal Fusion Transformer.
+- **Feature store migration** — Move from versioned Parquet files to Feast for more robust feature management and serving.
+- **CI/CD pipeline** — GitHub Actions to run tests, lint, build Docker images, and auto-deploy on merge to main.
 
 ---
 

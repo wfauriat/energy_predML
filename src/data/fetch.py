@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
@@ -36,9 +36,9 @@ def fetch_demand(
     region = region or settings.DEFAULT_REGION
 
     if start is None:
-        start = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%dT%H")
+        start = (datetime.now(UTC) - timedelta(days=30)).strftime("%Y-%m-%dT%H")
     if end is None:
-        end = datetime.utcnow().strftime("%Y-%m-%dT%H")
+        end = datetime.now(UTC).strftime("%Y-%m-%dT%H")
 
     logger.info("Fetching demand for region=%s from %s to %s", region, start, end)
 
@@ -92,7 +92,7 @@ def save_raw_response(records: list[dict[str, Any]], region: str) -> Path:
         Path to the saved JSON file.
     """
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     filepath = RAW_DATA_DIR / f"{region}_{timestamp}.json"
 
     with open(filepath, "w") as f:

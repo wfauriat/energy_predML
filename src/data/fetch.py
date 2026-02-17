@@ -50,6 +50,7 @@ def fetch_demand(
             "api_key": settings.EIA_API_KEY,
             "facets[respondent][]": region,
             "facets[type][]": "D",
+            "data[]": "value",
             "frequency": "hourly",
             "start": start,
             "end": end,
@@ -64,7 +65,7 @@ def fetch_demand(
         payload = response.json()
 
         data = payload.get("response", {}).get("data", [])
-        total = payload.get("response", {}).get("total", 0)
+        total = int(payload.get("response", {}).get("total", 0))
 
         if not data:
             break

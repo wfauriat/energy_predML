@@ -23,7 +23,11 @@ class Settings(BaseSettings):
     MLFLOW_TRACKING_URI: str = "http://localhost:5000"
     DEFAULT_REGION: str = "CISO"
 
-    model_config = {"env_file": PROJECT_ROOT / ".env", "env_file_encoding": "utf-8"}
+    model_config = {
+        "env_file": PROJECT_ROOT / ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
 
 
 settings = Settings()

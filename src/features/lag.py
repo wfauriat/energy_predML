@@ -32,9 +32,10 @@ def add_lag_features(df: pd.DataFrame) -> pd.DataFrame:
     df["demand_roll_7d_mean"] = df["demand_mwh"].shift(1).rolling(168).mean()
     df["demand_roll_7d_std"] = df["demand_mwh"].shift(1).rolling(168).std()
 
-    # Difference features (rate of change)
-    df["demand_diff_1h"] = df["demand_mwh"].diff(1)
-    df["demand_diff_24h"] = df["demand_mwh"].diff(24)
+    # Difference features (rate of change, shifted to avoid leakage)
+    # diff at time t = demand[t-1] - demand[t-2] (how demand changed in the previous step)
+    df["demand_diff_1h"] = df["demand_mwh"].shift(1).diff(1)
+    df["demand_diff_24h"] = df["demand_mwh"].shift(1).diff(24)
 
     lag_cols = [c for c in df.columns if "lag_" in c or "roll_" in c or "diff_" in c]
     logger.info("Added %d lag/rolling features", len(lag_cols))

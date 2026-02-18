@@ -21,7 +21,9 @@ services:
       start_period: 10s
 
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.serve
     ports:
       - "8000:8000"
     volumes:
@@ -35,7 +37,9 @@ services:
         condition: service_healthy
 
   streamlit:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.serve
     ports:
       - "8501:8501"
     volumes:
@@ -58,7 +62,9 @@ services:
   #   docker compose run --rm ingest
   #   docker compose run --rm train
   ingest:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ingest
     profiles: ["tools"]
     volumes:
       - ./data:/app/data
@@ -69,7 +75,9 @@ services:
     command: python -m src.workflows.ingest
 
   train:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.train
     profiles: ["tools"]
     volumes:
       - ./data:/app/data
@@ -84,6 +92,17 @@ services:
     depends_on:
       mlflow:
         condition: service_healthy
+
+  monitor:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.monitor
+    profiles: ["tools"]
+    volumes:
+      - ./data:/app/data
+    user: "${UID:-1000}:${GID:-1000}"
+    env_file: .env
+    command: python -m src.workflows.monitor
 
 volumes:
   mlflow_data:

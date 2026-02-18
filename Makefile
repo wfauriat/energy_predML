@@ -1,6 +1,6 @@
 .PHONY: setup test clean \
         local-mlflow local-fetch local-train local-serve local-dashboard local-monitor \
-        docker-fetch docker-train docker-serve
+        docker-fetch docker-train docker-serve docker-monitor
 
 export UID := $(shell id -u)
 export GID := $(shell id -g)
@@ -72,6 +72,9 @@ docker-train:
 
 docker-serve:
 	docker compose up --build api streamlit mlflow
+
+docker-monitor:
+	docker compose run --rm monitor
 
 # ── UTILITIES ──────────────────────────────────────────────────────────────
 

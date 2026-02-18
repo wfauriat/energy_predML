@@ -5,8 +5,7 @@ import logging
 import pandas as pd
 
 from src.config import settings
-from src.features.pipeline import build_features
-from src.models.xgboost_model import NON_FEATURE_COLS
+from src.features.pipeline import NON_FEATURE_COLS, build_features
 from src.monitoring.drift import (
     generate_drift_report,
     generate_regression_report,

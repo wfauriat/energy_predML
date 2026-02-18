@@ -71,6 +71,7 @@ make local-monitor    # drift detection
 make docker-fetch     # ingest data (docker compose run)
 make docker-train     # train + register model (docker compose run)
 make docker-serve     # start MLflow + API + Streamlit (docker compose up)
+make docker-monitor   # drift detection (docker compose run)
 ```
 
 Services (Docker mode):
@@ -85,6 +86,8 @@ MLflow storage differs per mode:
 - **Docker mode** uses a Docker-managed named volume (`mlflow_data`), which keeps the MLflow server running as root without permission issues and avoids the `mkdir -p` workaround.
 
 The two modes do not share trained models — run `local-*` or `docker-*` targets consistently within a workflow.
+
+Drift reports (`./data/drift_reports/`) are written to the shared `./data/` bind mount, so they are visible in the Streamlit dashboard regardless of which mode generated them.
 
 ## Project Structure
 
@@ -112,16 +115,24 @@ energy_predML/
 │   └── workflows/
 │       ├── ingest.py             # Prefect flow: fetch -> validate -> store
 │       ├── train.py              # Training pipeline: baseline + XGBoost + Optuna + MLflow registry
-│       └── monitor.py            # Prefect flow: drift detection
+│       └── monitor.py            # Drift detection: Evidently data drift + regression reports
 ├── streamlit_app/
 │   └── app.py                    # Dashboard: forecast, accuracy, features, drift
 ├── scripts/
 │   └── compare_models.py         # 1-step vs 24h recursive forecast comparison
 ├── tests/                        # 25 unit tests (features, data, models)
-├── Dockerfile
+├── docker/
+│   ├── Dockerfile.ingest         # Data ingestion image (prefect + data stack only)
+│   ├── Dockerfile.train          # Model training image (xgboost + optuna + mlflow)
+│   ├── Dockerfile.monitor        # Drift monitoring image (evidently + data stack)
+│   ├── Dockerfile.serve          # API + Streamlit image (xgboost inference + mlflow)
+│   ├── requirements-ingest.txt
+│   ├── requirements-train.txt
+│   ├── requirements-monitor.txt
+│   └── requirements-serve.txt
 ├── docker-compose.yml
 ├── Makefile
-├── requirements.txt
+├── requirements.txt              # Full deps for local venv (make setup / make test)
 └── .env.example
 ```
 
@@ -196,5 +207,6 @@ Runs 25 tests covering:
 - **Temporal splits only** — never shuffle time-series data. Train on past, validate on future.
 - **No data leakage** — all lag/diff features use `shift()` to ensure only past data is used.
 - **Idempotent ingestion** — DuckDB upserts skip existing rows, safe to re-run.
-- **Two explicit run modes** — `local-*` targets run everything in the venv; `docker-*` targets run everything in containers. Both modes share the same `./data/` and `./mlflow_data/` directories, so switching between them mid-workflow is safe. MLflow uses `--serve-artifacts` so artifact URIs are proxy-relative, never tied to an absolute path.
+- **Two explicit run modes** — `local-*` targets run everything in the venv; `docker-*` targets run everything in containers. Both modes share `./data/` (raw data, features, drift reports). MLflow storage is separate: local mode writes to `./mlflow_data/` on the host; Docker mode uses a named Docker volume. Run `local-*` or `docker-*` targets consistently within a workflow. MLflow uses `--serve-artifacts` so artifact URIs are proxy-relative, never tied to an absolute path.
+- **Per-service Docker images** — each service installs only the dependencies it needs (`docker/Dockerfile.*` + `docker/requirements-*.txt`). The serving image excludes training packages (optuna, scikit-learn, prefect, evidently); the monitoring image excludes all ML packages.
 - **Versioned features** — Parquet files are timestamped for reproducibility.

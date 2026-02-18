@@ -1,27 +1,22 @@
+# Serving-only dependencies (api + streamlit).
+# Excludes training/tuning/orchestration/monitoring packages:
+#   optuna, prefect, lightgbm, scikit-learn, evidently
+
 # Data
 requests>=2.31.0
 pandas>=2.1.0
 duckdb>=0.9.0
 pyarrow>=14.0.0
 
-# ML
+# ML — inference only
 xgboost>=2.0.0
-lightgbm>=4.1.0
-optuna>=3.4.0
-scikit-learn>=1.3.0
 
-# Experiment tracking
+# Experiment tracking (model loading)
 mlflow>=2.9.0
-
-# Orchestration
-prefect>=2.14.0
 
 # Serving
 fastapi>=0.104.0
 uvicorn>=0.24.0
-
-# Monitoring
-evidently>=0.4.0
 
 # UI
 matplotlib>=3.7.0

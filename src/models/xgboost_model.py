@@ -3,19 +3,14 @@
 import logging
 from typing import Any
 
-import mlflow
 import numpy as np
-import optuna
 import pandas as pd
 import xgboost as xgb
-from sklearn.model_selection import TimeSeriesSplit
 
+from src.features.pipeline import NON_FEATURE_COLS
 from src.models.evaluate import compute_metrics
 
 logger = logging.getLogger(__name__)
-
-# Features to exclude from model input
-NON_FEATURE_COLS = {"timestamp", "region", "demand_mwh"}
 
 
 def get_feature_columns(df: pd.DataFrame) -> list[str]:
@@ -96,6 +91,9 @@ def tune_xgboost(
     Returns:
         Best hyperparameters found.
     """
+    import optuna
+    from sklearn.model_selection import TimeSeriesSplit
+
     feature_cols = get_feature_columns(df)
     X = df[feature_cols].values
     y = df[target].values

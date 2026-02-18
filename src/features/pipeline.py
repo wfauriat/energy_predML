@@ -13,6 +13,9 @@ from src.features.temporal import add_temporal_features
 
 logger = logging.getLogger(__name__)
 
+# Columns that are metadata/target, not model input features
+NON_FEATURE_COLS = {"timestamp", "region", "demand_mwh"}
+
 
 def build_features(
     region: str | None = None,

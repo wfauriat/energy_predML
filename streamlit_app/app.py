@@ -13,8 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.config import DATA_DIR, settings
 from src.data.store import load_demand
-from src.features.pipeline import build_features, get_latest_features
-from src.models.xgboost_model import NON_FEATURE_COLS, get_feature_columns
+from src.features.pipeline import NON_FEATURE_COLS, build_features, get_latest_features
+from src.models.xgboost_model import get_feature_columns
 
 st.set_page_config(page_title="Energy Grid Forecast", layout="wide")
 st.title("Energy Grid Load Forecasting")

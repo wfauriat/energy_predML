@@ -1,7 +1,11 @@
-.PHONY: setup fetch-data train serve test monitor clean
+.PHONY: setup test clean \
+        local-mlflow local-fetch local-train local-serve local-dashboard local-monitor \
+        docker-fetch docker-train docker-serve
 
 export UID := $(shell id -u)
 export GID := $(shell id -g)
+
+# ── SETUP ──────────────────────────────────────────────────────────────────
 
 setup:
 	python3 -m venv .venv
@@ -9,31 +13,69 @@ setup:
 	cp -n .env.example .env || true
 	@echo "Setup complete. Edit .env with your EIA API key."
 
-fetch-data:
+# ── LOCAL MODE ─────────────────────────────────────────────────────────────
+# Everything runs in the .venv Python environment on the host. No Docker needed
+# for individual steps, but MLflow must be running first (see local-mlflow).
+#
+# Typical workflow:
+#   terminal 1: make local-mlflow
+#   terminal 2: make local-fetch && make local-train && make local-serve
+#               make local-dashboard  (optional, in a third terminal)
+
+local-mlflow:
+	@if curl -sf http://localhost:5000/health > /dev/null 2>&1; then \
+		echo "MLflow already running at http://localhost:5000 — nothing to do."; \
+	else \
+		mkdir -p mlflow_data && \
+		.venv/bin/mlflow server \
+			--host 0.0.0.0 --port 5000 \
+			--backend-store-uri sqlite:///$(CURDIR)/mlflow_data/mlflow.db \
+			--artifacts-destination $(CURDIR)/mlflow_data/artifacts \
+			--serve-artifacts \
+			--allowed-hosts localhost,localhost:5000; \
+	fi
+
+local-fetch:
 	.venv/bin/python -m src.workflows.ingest
 
-mlflow-server:
-	mkdir -p mlflow_data
-	docker compose up -d --wait mlflow
-
-train: mlflow-server
+local-train:
 	.venv/bin/python -m src.workflows.train
 
-monitor:
-	.venv/bin/python -m src.workflows.monitor
-
-serve: mlflow-server
+local-serve:
 	.venv/bin/uvicorn src.serving.api:app --port 8000
 
-dashboard: mlflow-server
+local-dashboard:
 	.venv/bin/streamlit run streamlit_app/app.py
 
-serve-docker:
-	docker compose up --build
+local-monitor:
+	.venv/bin/python -m src.workflows.monitor
+
+# ── DOCKER MODE ────────────────────────────────────────────────────────────
+# Everything runs inside Docker containers. MLflow, API, and Streamlit are all
+# containerized. Data and model artifacts are persisted on the host via volumes.
+#
+# Typical workflow:
+#   make docker-fetch && make docker-train && make docker-serve
+
+docker-fetch:
+	mkdir -p data mlflow_data
+	docker compose run --rm ingest
+
+docker-train:
+	mkdir -p data mlflow_data
+	docker compose up -d --wait mlflow
+	docker compose run --rm train
+	docker compose stop mlflow
+
+docker-serve:
+	docker compose up --build api streamlit mlflow
+
+# ── UTILITIES ──────────────────────────────────────────────────────────────
 
 test:
 	.venv/bin/python -m pytest tests/ -v
 
 clean:
+	docker compose down 2>/dev/null || true
 	rm -rf data/ mlruns/ mlflow_data/ __pycache__ .pytest_cache
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

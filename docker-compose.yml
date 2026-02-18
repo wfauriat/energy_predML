@@ -53,3 +53,33 @@ services:
     depends_on:
       mlflow:
         condition: service_healthy
+
+  # ── One-shot pipeline services (docker-fetch / docker-train) ───────────────
+  # These are not started by `docker compose up`. Run them explicitly:
+  #   docker compose run --rm ingest
+  #   docker compose run --rm train
+  ingest:
+    build: .
+    profiles: ["tools"]
+    volumes:
+      - ./data:/app/data
+    user: "${UID:-1000}:${GID:-1000}"
+    env_file: .env
+    environment:
+      - PREFECT_HOME=/tmp/prefect
+    command: python -m src.workflows.ingest
+
+  train:
+    build: .
+    profiles: ["tools"]
+    volumes:
+      - ./data:/app/data
+      - ./mlflow_data:/app/mlflow_data
+    user: "${UID:-1000}:${GID:-1000}"
+    env_file: .env
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    command: python -m src.workflows.train
+    depends_on:
+      mlflow:
+        condition: service_healthy

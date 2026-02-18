@@ -41,7 +41,9 @@ def run_training(
         except Exception as exc:
             raise RuntimeError(
                 f"MLflow server not reachable at {tracking_uri}. "
-                "Start it first with: docker compose up -d mlflow"
+                "Start it first with:\n"
+                "  local mode:  make local-mlflow  (in a separate terminal)\n"
+                "  docker mode: make docker-train   (handles MLflow automatically)"
             ) from exc
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(EXPERIMENT_NAME)

@@ -39,7 +39,7 @@ EIA API  ──>  Data Ingestion  ──>  Feature Engineering  ──>  Model T
 ### Prerequisites
 
 - Python 3.11+
-- Docker (required — MLflow runs as a container for all workflows)
+- Docker (required for Docker mode; optional for local mode)
 - Free EIA API key from https://www.eia.gov/opendata/register.php
 
 ### Setup
@@ -49,43 +49,36 @@ make setup
 # Edit .env with your EIA API key
 ```
 
-### Run the Pipeline
+### Local Mode — everything runs in the venv, no Docker needed for individual steps
+
+MLflow must be running before training or serving. Start it in a dedicated terminal, then run the rest of the pipeline in another.
 
 ```bash
-# 1. Fetch data from EIA API (last 30 days of CISO demand)
-make fetch-data
+# terminal 1 — keep this running throughout
+make local-mlflow
 
-# 2. Train models (auto-starts the MLflow container, then runs training)
-make train
-
-# 3. Start the API locally (auto-starts MLflow if not already running)
-make serve
-
-# 4. Start the dashboard locally (auto-starts MLflow if not already running)
-make dashboard
-
-# 5. Run drift monitoring
-make monitor
+# terminal 2
+make local-fetch      # fetch data from EIA API
+make local-train      # train + register model in MLflow
+make local-serve      # FastAPI on :8000
+make local-dashboard  # Streamlit on :8501 (optional third terminal)
+make local-monitor    # drift detection
 ```
 
-> **Note:** `make train`, `make serve`, and `make dashboard` all automatically start the MLflow Docker container (`docker compose up -d --wait mlflow`) before running. MLflow is always containerized; it is never run locally.
-
-### Docker Deployment
-
-Runs the full stack in containers — MLflow, API, and Streamlit dashboard.
+### Docker Mode — everything runs in containers
 
 ```bash
-# Train first to populate the model registry, then start all services
-make train
-make serve-docker   # or: docker compose up --build
+make docker-fetch     # ingest data (docker compose run)
+make docker-train     # train + register model (docker compose run)
+make docker-serve     # start MLflow + API + Streamlit (docker compose up)
 ```
 
-Services:
+Services (Docker mode):
 - **MLflow UI** — `http://localhost:5000`
 - **FastAPI** — `http://localhost:8000` (docs at `/docs`)
 - **Streamlit** — `http://localhost:8501`
 
-Persistent data is stored in `./mlflow_data/` (SQLite DB + model artifacts) and `./data/` (raw + processed datasets). These directories are bind-mounted into the containers and survive restarts.
+Persistent data (`./data/` and `./mlflow_data/`) is stored on the host and shared between both modes — you can train locally and serve via Docker, or vice versa.
 
 ## Project Structure
 
@@ -112,7 +105,7 @@ energy_predML/
 │   │   └── drift.py              # Evidently data drift + regression reports
 │   └── workflows/
 │       ├── ingest.py             # Prefect flow: fetch -> validate -> store
-│       ├── train.py              # Prefect flow: train baseline + XGBoost
+│       ├── train.py              # Training pipeline: baseline + XGBoost + Optuna + MLflow registry
 │       └── monitor.py            # Prefect flow: drift detection
 ├── streamlit_app/
 │   └── app.py                    # Dashboard: forecast, accuracy, features, drift
@@ -197,5 +190,5 @@ Runs 25 tests covering:
 - **Temporal splits only** — never shuffle time-series data. Train on past, validate on future.
 - **No data leakage** — all lag/diff features use `shift()` to ensure only past data is used.
 - **Idempotent ingestion** — DuckDB upserts skip existing rows, safe to re-run.
-- **MLflow always containerized** — all workflows (training, serving, dashboard) connect to `http://localhost:5000`. The `mlflow-server` Makefile target starts the container automatically. Fail-fast behaviour: services exit with a clear error rather than silently falling back to a local filesystem.
+- **Two explicit run modes** — `local-*` targets run everything in the venv; `docker-*` targets run everything in containers. Both modes share the same `./data/` and `./mlflow_data/` directories, so switching between them mid-workflow is safe. MLflow uses `--serve-artifacts` so artifact URIs are proxy-relative, never tied to an absolute path.
 - **Versioned features** — Parquet files are timestamped for reproducibility.

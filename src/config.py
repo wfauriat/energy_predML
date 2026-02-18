@@ -15,6 +15,7 @@ RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 PREDICTIONS_DIR = DATA_DIR / "predictions"
 RETRAIN_FLAG_PATH = DATA_DIR / "retrain_needed"
+TRAIN_CUTOFF_PATH = DATA_DIR / "train_cutoff.txt"
 
 
 class Settings(BaseSettings):

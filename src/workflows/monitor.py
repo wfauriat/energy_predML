@@ -4,7 +4,7 @@ import logging
 
 import pandas as pd
 
-from src.config import RETRAIN_FLAG_PATH, settings
+from src.config import RETRAIN_FLAG_PATH, TRAIN_CUTOFF_PATH, settings
 from src.data.store import load_demand, load_predictions
 from src.features.pipeline import NON_FEATURE_COLS, build_features
 from src.monitoring.drift import (
@@ -68,9 +68,44 @@ def run_monitoring(
     # Build features from all available data
     df = build_features(region=region)
 
-    split_idx = int(len(df) * train_ratio)
-    reference_df = df.iloc[:split_idx].copy()
-    current_df = df.iloc[split_idx:].copy()
+    # Prefer a cutoff-based split: reference = data the model was trained on,
+    # current = data that arrived after the last training run.
+    # Falls back to a fixed 80/20 split when no cutoff exists or when there
+    # is too little new data (< 24 rows) to produce a meaningful report.
+    MIN_CURRENT_ROWS = 24
+    if TRAIN_CUTOFF_PATH.exists():
+        cutoff_ts = pd.Timestamp(TRAIN_CUTOFF_PATH.read_text().strip())
+        reference_df = df[df["timestamp"] <= cutoff_ts].copy()
+        current_df   = df[df["timestamp"] >  cutoff_ts].copy()
+        if len(current_df) < MIN_CURRENT_ROWS:
+            logger.info(
+                "Only %d rows after training cutoff (%s) — not enough new data "
+                "for a meaningful drift report. Run local-fetch / docker-fetch to "
+                "ingest fresh data, then re-run monitoring.",
+                len(current_df),
+                cutoff_ts,
+            )
+            return {
+                "drift_metrics": {"drift_share": 0.0},
+                "drift_report_path": None,
+                "regression_report_path": None,
+                "needs_retraining": False,
+                "retrain_triggered": False,
+            }
+        logger.info(
+            "Using cutoff split: reference %d rows (up to %s), current %d rows (after %s)",
+            len(reference_df), cutoff_ts, len(current_df), cutoff_ts,
+        )
+    else:
+        split_idx = int(len(df) * train_ratio)
+        reference_df = df.iloc[:split_idx].copy()
+        current_df   = df.iloc[split_idx:].copy()
+        logger.info(
+            "No training cutoff found — using %.0f/%0.f split: "
+            "reference %d rows, current %d rows",
+            train_ratio * 100, (1 - train_ratio) * 100,
+            len(reference_df), len(current_df),
+        )
 
     feature_cols = [c for c in df.columns if c not in NON_FEATURE_COLS]
 

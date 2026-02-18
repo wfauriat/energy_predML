@@ -5,7 +5,8 @@ import logging
 import mlflow
 import xgboost as xgb
 
-from src.config import settings
+from src.config import TRAIN_CUTOFF_PATH, settings
+from src.data.store import load_demand
 from src.features.pipeline import build_features, get_latest_features, save_features
 from src.models.baseline import train_baseline
 from src.models.evaluate import compute_metrics
@@ -120,6 +121,14 @@ def run_training(
             )
             mlflow.log_metrics(default_metrics)
             logger.info("Default model registered to MLflow")
+
+    # Persist training cutoff so the monitor knows what "new data" means.
+    # Use the DuckDB max (not the parquet snapshot) so the cutoff always
+    # reflects everything available at training time, even when the parquet
+    # file is slightly stale.
+    cutoff_ts = load_demand(region=settings.DEFAULT_REGION)["timestamp"].max()
+    TRAIN_CUTOFF_PATH.write_text(str(cutoff_ts))
+    logger.info("Training cutoff written: %s", cutoff_ts)
 
     # Summary
     logger.info("=== Training Summary ===")

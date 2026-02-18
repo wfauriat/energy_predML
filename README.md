@@ -1,5 +1,7 @@
 # Energy Grid Load Forecasting
 
+[![Tests](https://github.com/wfauriat/energy_predML/actions/workflows/test.yml/badge.svg)](https://github.com/wfauriat/energy_predML/actions/workflows/test.yml)
+
 A production-grade ML pipeline that forecasts hourly electricity demand (MWh) for US grid regions. The system fetches live data from the EIA API, engineers features, trains XGBoost models with hyperparameter tuning, serves predictions via REST API, and monitors for data drift.
 
 ## Architecture

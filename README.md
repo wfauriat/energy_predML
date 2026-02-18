@@ -117,7 +117,7 @@ energy_predML/
 │   │   └── drift.py              # Evidently data drift + regression reports
 │   └── workflows/
 │       ├── ingest.py             # Prefect flow: fetch -> validate -> store
-│       ├── train.py              # Training pipeline: baseline + XGBoost + Optuna + MLflow registry
+│       ├── train.py              # Training pipeline: baseline + XGBoost + Optuna + MLflow registry; writes data/train_cutoff.txt
 │       └── monitor.py            # Drift detection + auto-retraining on drift threshold breach
 ├── streamlit_app/
 │   └── app.py                    # Dashboard: forecast, accuracy, features, drift
@@ -216,3 +216,4 @@ Runs 25 tests covering:
 - **Closed monitoring loop** — every `/predict` response is logged to a `predictions` table in DuckDB. The monitoring workflow inner-joins this table with actual demand to compute real prediction error, replacing a crude lag-feature proxy. Drift reports are only generated once ≥48 matched rows accumulate.
 - **Auto-retraining on drift** — when the drifted-feature share exceeds 30%, the monitor writes `data/retrain_needed` and attempts `run_training(use_tuning=False)` directly (local mode). In Docker mode the container exits cleanly and the Makefile reads the flag file to invoke `docker-train`, clearing it only on success.
 - **Dynamic model loading** — the API and dashboard always load the highest registered version from the MLflow model registry (`search_model_versions` + `max(version)`), so retraining automatically promotes the new model without any config change.
+- **Cutoff-based drift reference** — training writes the DuckDB max timestamp to `data/train_cutoff.txt`. The monitor uses this as the split point: reference = everything the model was trained on, current = data that arrived after training. Running the monitor immediately after a retrain correctly reports no drift (zero new rows); drift only fires again once a daily fetch brings in genuinely new data. Falls back to a fixed 80/20 split on the first run before any cutoff exists.

@@ -1,5 +1,8 @@
 .PHONY: setup fetch-data train serve test monitor clean
 
+export UID := $(shell id -u)
+export GID := $(shell id -g)
+
 setup:
 	python3 -m venv .venv
 	.venv/bin/pip install -r requirements.txt
@@ -9,7 +12,10 @@ setup:
 fetch-data:
 	.venv/bin/python -m src.workflows.ingest
 
-train:
+mlflow-server:
+	docker compose up -d --wait mlflow
+
+train: mlflow-server
 	.venv/bin/python -m src.workflows.train
 
 monitor:

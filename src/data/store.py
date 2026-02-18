@@ -22,11 +22,19 @@ CREATE TABLE IF NOT EXISTS demand (
 """
 
 
-def get_connection() -> duckdb.DuckDBPyConnection:
-    """Get a DuckDB connection, creating the database and table if needed."""
+def get_connection(read_only: bool = False) -> duckdb.DuckDBPyConnection:
+    """Get a DuckDB connection, creating the database and table if needed.
+
+    Args:
+        read_only: Open in read-only mode (allows concurrent readers).
+                   Falls back to read-write if the database does not exist yet.
+    """
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = duckdb.connect(str(DB_PATH))
-    conn.execute(CREATE_TABLE_SQL)
+    # read_only requires the file to exist; fall back to read-write if it doesn't
+    effective_read_only = read_only and DB_PATH.exists()
+    conn = duckdb.connect(str(DB_PATH), read_only=effective_read_only)
+    if not effective_read_only:
+        conn.execute(CREATE_TABLE_SQL)
     return conn
 
 
@@ -83,7 +91,7 @@ def load_demand(
     Returns:
         DataFrame with columns: timestamp, region, demand_mwh.
     """
-    conn = get_connection()
+    conn = get_connection(read_only=True)
 
     query = "SELECT timestamp, region, demand_mwh FROM demand WHERE 1=1"
     params: list = []

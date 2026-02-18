@@ -1,29 +1,38 @@
 services:
+  mlflow:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:${PWD}/mlruns
+    user: "${UID:-1000}:${GID:-1000}"
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri ${PWD}/mlruns
+      --default-artifact-root ${PWD}/mlruns
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
   api:
     build: .
     ports:
       - "8000:8000"
     volumes:
       - ./data:/app/data
-      # Mount mlruns at the same absolute path as on host so MLflow artifact paths resolve
-      - ./mlruns:${HOST_PROJECT_ROOT}/mlruns
+      - ./mlruns:${PWD}/mlruns
+    user: "${UID:-1000}:${GID:-1000}"
+    env_file: .env
     environment:
-      - MLFLOW_TRACKING_URI=${HOST_PROJECT_ROOT}/mlruns
+      - MLFLOW_TRACKING_URI=${PWD}/mlruns
     depends_on:
-      - mlflow
-
-  mlflow:
-    build: .
-    ports:
-      - "5000:5000"
-    volumes:
-      - ./mlruns:${HOST_PROJECT_ROOT}/mlruns
-    command: >
-      mlflow server
-      --host 0.0.0.0
-      --port 5000
-      --backend-store-uri ${HOST_PROJECT_ROOT}/mlruns
-      --default-artifact-root ${HOST_PROJECT_ROOT}/mlruns
+      mlflow:
+        condition: service_healthy
 
   streamlit:
     build: .
@@ -31,11 +40,18 @@ services:
       - "8501:8501"
     volumes:
       - ./data:/app/data
-      - ./mlruns:${HOST_PROJECT_ROOT}/mlruns
+      - ./mlruns:${PWD}/mlruns
       - ./streamlit_app:/app/streamlit_app
+    user: "${UID:-1000}:${GID:-1000}"
+    env_file: .env
+    environment:
+      - MLFLOW_TRACKING_URI=${PWD}/mlruns
     command: >
       streamlit run streamlit_app/app.py
       --server.port 8501
       --server.address 0.0.0.0
     depends_on:
-      - api
+      mlflow:
+        condition: service_healthy
+      api:
+        condition: service_started

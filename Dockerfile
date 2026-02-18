@@ -8,7 +8,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY src/ src/
-COPY .env .env
 
 # Create data directory
 RUN mkdir -p data/raw data/processed data/predictions

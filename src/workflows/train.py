@@ -41,7 +41,13 @@ def run_training(
         except Exception:
             from src.config import PROJECT_ROOT
             tracking_uri = str(PROJECT_ROOT / "mlruns")
-            logger.info("MLflow server not available, using local store: %s", tracking_uri)
+            logger.warning(
+                "MLflow server not reachable at %s. Falling back to local store: %s. "
+                "Models trained in this mode will NOT be loadable from Docker containers. "
+                "Run 'docker compose up -d mlflow' before training for full compatibility.",
+                settings.MLFLOW_TRACKING_URI,
+                tracking_uri,
+            )
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(EXPERIMENT_NAME)
 

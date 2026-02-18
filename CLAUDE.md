@@ -491,3 +491,83 @@ When implementing this project:
 7. Commit frequently with clear messages
 
 The goal is a **working, production-flavored pipeline** that demonstrates MLOps competence, not a perfect solution. Ship the MVP, then iterate.
+
+---
+
+## Implementation Status
+
+All MVP phases complete. One optional item (alerting) intentionally deferred.
+
+### Phase 0 — Setup ✅
+- [x] Git repository, virtual environment, dependencies
+- [x] EIA API key, `.env`, `config.py` with Pydantic settings
+
+### Phase 1 — Data Ingestion ✅
+- [x] EIA API client with pagination and rate limiting (`src/data/fetch.py`)
+- [x] DuckDB storage with idempotent upsert (`src/data/store.py`)
+- [x] Prefect ingest flow: fetch → validate → store (`src/workflows/ingest.py`)
+
+### Phase 2 — Feature Engineering ✅
+- [x] 11 temporal features incl. cyclical encoding (`src/features/temporal.py`)
+- [x] 10 lag/rolling/diff features, all shifted to prevent leakage (`src/features/lag.py`)
+- [x] Feature pipeline with versioned Parquet output (`src/features/pipeline.py`)
+- [x] Prefect feature flow wired to ingest flow
+
+### Phase 3 — Model Training ✅
+- [x] MLflow experiment `energy_grid_forecast`, SQLite backend, `--serve-artifacts`
+- [x] Naive baseline: lag_24h (RMSE 1927 MWh)
+- [x] XGBoost default (RMSE 564 MWh) and Optuna-tuned (RMSE 501 MWh, R² 0.95)
+- [x] All runs logged; best model registered to MLflow Model Registry
+- [x] Training cutoff written to `data/train_cutoff.txt` for drift reference
+
+### Phase 4 — Model Serving ✅
+- [x] FastAPI: `GET /health`, `POST /predict` with Pydantic validation
+- [x] Feature generation at inference time from DuckDB history
+- [x] Every prediction logged to `predictions` table in DuckDB
+- [x] Confidence interval: `±1.96 × val RMSE` fetched from MLflow run at startup
+- [x] 4 per-service Docker images; `docker-compose.yml` with MLflow container
+
+### Phase 5 — Monitoring ✅
+- [x] Evidently `DataDriftPreset` + `RegressionPreset` reports
+- [x] Cutoff-based drift split (reference = training data, current = post-cutoff)
+- [x] Auto-retraining: drift share > `DRIFT_THRESHOLD` (configurable via `.env`, default 0.3) writes flag and triggers `run_training(use_tuning=False)`
+- [x] Closed monitoring loop: predictions joined with actuals via DuckDB inner join
+- [ ] Alerting via email/Slack — deferred (optional)
+
+### Phase 6 — User Interface ✅
+- [x] Streamlit dashboard: Forecast, Historical Accuracy, Feature Importance, Drift Reports tabs
+- [x] Streamlit service in `docker-compose.yml`
+
+### Phase 7 — Documentation & Testing ✅
+- [x] README: architecture, quick start, API docs, model performance, design decisions
+- [x] Makefile: `local-*` and `docker-*` targets for all pipeline steps
+- [x] 25 unit tests (data, features, models) + 24 integration tests (pipeline, API, monitoring)
+- [x] `tests/conftest.py` with `tmp_duckdb` and `seed_demand` fixtures for DB isolation
+- [x] `.gitignore`
+
+---
+
+## Post-MVP Progress & Prioritized Next Steps
+
+### Done since MVP
+- **RMSE-based confidence intervals** — replaced hardcoded ±2% with `±1.96 × val RMSE` from the model's MLflow run; falls back to ±4% when metric unavailable (`src/serving/predict.py`)
+- **Configurable drift threshold** — `DRIFT_THRESHOLD` moved from hardcoded constant to `Settings` in `config.py`; set via `.env` without touching source (`src/config.py`, `src/workflows/monitor.py`)
+- **Integration tests** — 24 tests covering data pipeline, feature pipeline, API endpoints, and monitoring workflow; `tmp_duckdb` fixture isolates every test from production DB
+
+### Remaining — prioritized
+
+#### High value, low effort
+- **CI/CD (GitHub Actions)** — `.github/workflows/test.yml` running `make test` on every PR. Highest portfolio signal: shows the 49 tests are enforced, not just present. Also add Docker image build on merge to main.
+- **Scheduled orchestration** — Wire Prefect schedules so ingestion runs daily at 6AM UTC and monitoring runs weekly. Transforms the project from "pipeline that can run" to "pipeline that does run".
+
+#### Meaningful model improvement
+- **Weather features** — Temperature is the #1 external driver of electricity demand. Open-Meteo API is free, no key needed, has historical + forecast data. Join by timestamp + location; add `temperature_c`, `humidity`, `wind_speed`. Expected to push tuned RMSE below 400 MWh.
+- **SHAP explanations** — `shap.TreeExplainer` works out of the box with XGBoost. Surface per-prediction feature contributions in the API response and Streamlit Feature Importance tab.
+- **Quantile regression** — Current `±1.96 × RMSE` assumes constant variance. Train q=0.1 and q=0.9 XGBoost models (`objective='reg:quantileerror'`) for proper heteroskedastic intervals. Requires changes to `train.py`, `predict.py`, and the MLflow registry.
+- **LightGBM comparison** — Add `src/models/lightgbm_model.py`, log both models in the same training run, let the registry always hold the winner. Infrastructure already supports it.
+
+#### Infrastructure
+- **API authentication** — API key header (`X-API-Key`) via FastAPI middleware. Simple to add, makes the project deployable without being an open endpoint.
+- **Cloud deployment** — Push the API to AWS Lambda (via Mangum) or GCP Cloud Run, S3/GCS for MLflow artifacts. Transforms "runs locally" to "actually deployed".
+- **Prometheus + Grafana** — Replace Evidently HTML reports with real-time dashboards: prediction latency, error rates, drift scores as time-series.
+- **Multi-step probabilistic forecasting** — Predict full 24h distribution using DeepAR or Temporal Fusion Transformer instead of single-point estimates.

@@ -39,7 +39,7 @@ EIA API  ──>  Data Ingestion  ──>  Feature Engineering  ──>  Model T
 ### Prerequisites
 
 - Python 3.11+
-- Docker (optional, for containerized deployment)
+- Docker (required — MLflow runs as a container for all workflows)
 - Free EIA API key from https://www.eia.gov/opendata/register.php
 
 ### Setup
@@ -55,25 +55,37 @@ make setup
 # 1. Fetch data from EIA API (last 30 days of CISO demand)
 make fetch-data
 
-# 2. Train models (baseline + XGBoost + Optuna tuning)
+# 2. Train models (auto-starts the MLflow container, then runs training)
 make train
 
-# 3. Start the API
+# 3. Start the API locally (auto-starts MLflow if not already running)
 make serve
 
-# 4. Start the dashboard
+# 4. Start the dashboard locally (auto-starts MLflow if not already running)
 make dashboard
 
 # 5. Run drift monitoring
 make monitor
 ```
 
+> **Note:** `make train`, `make serve`, and `make dashboard` all automatically start the MLflow Docker container (`docker compose up -d --wait mlflow`) before running. MLflow is always containerized; it is never run locally.
+
 ### Docker Deployment
 
+Runs the full stack in containers — MLflow, API, and Streamlit dashboard.
+
 ```bash
-# Start all services (API on :8000, MLflow on :5000, Streamlit on :8501)
-make serve-docker
+# Train first to populate the model registry, then start all services
+make train
+make serve-docker   # or: docker compose up --build
 ```
+
+Services:
+- **MLflow UI** — `http://localhost:5000`
+- **FastAPI** — `http://localhost:8000` (docs at `/docs`)
+- **Streamlit** — `http://localhost:8501`
+
+Persistent data is stored in `./mlflow_data/` (SQLite DB + model artifacts) and `./data/` (raw + processed datasets). These directories are bind-mounted into the containers and survive restarts.
 
 ## Project Structure
 
@@ -185,5 +197,5 @@ Runs 25 tests covering:
 - **Temporal splits only** — never shuffle time-series data. Train on past, validate on future.
 - **No data leakage** — all lag/diff features use `shift()` to ensure only past data is used.
 - **Idempotent ingestion** — DuckDB upserts skip existing rows, safe to re-run.
-- **MLflow local fallback** — works without a running MLflow server by writing to `mlruns/`.
+- **MLflow always containerized** — all workflows (training, serving, dashboard) connect to `http://localhost:5000`. The `mlflow-server` Makefile target starts the container automatically. Fail-fast behaviour: services exit with a clear error rather than silently falling back to a local filesystem.
 - **Versioned features** — Parquet files are timestamped for reproducibility.

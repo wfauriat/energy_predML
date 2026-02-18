@@ -9,11 +9,14 @@ EIA API  ──>  Data Ingestion  ──>  Feature Engineering  ──>  Model T
                 (Prefect)            (Pandas/DuckDB)        (XGBoost/Optuna/MLflow)
                     │                                              │
                     ▼                                              ▼
-              DuckDB Storage                              FastAPI Serving
-                    │                                     (POST /predict)
+              DuckDB Storage  <───── prediction logging ─── FastAPI Serving
+              (demand table)                                 (POST /predict)
+              (predictions table)                                  │
+                    │                                              │
                     ▼                                              │
             Drift Monitoring  <────────────────────────────────────┘
               (Evidently AI)
+              auto-retrains on drift
                     │
                     ▼
           Streamlit Dashboard
@@ -98,7 +101,7 @@ energy_predML/
 │   ├── data/
 │   │   ├── fetch.py              # EIA API client with pagination
 │   │   ├── validate.py           # Schema validation
-│   │   └── store.py              # DuckDB storage with idempotent upserts
+│   │   └── store.py              # DuckDB storage: demand table + predictions table (logged per /predict call)
 │   ├── features/
 │   │   ├── temporal.py           # Hour, day, month, weekend, holiday, cyclical
 │   │   ├── lag.py                # Lags (1h/24h/48h/168h), rolling, diffs
@@ -115,7 +118,7 @@ energy_predML/
 │   └── workflows/
 │       ├── ingest.py             # Prefect flow: fetch -> validate -> store
 │       ├── train.py              # Training pipeline: baseline + XGBoost + Optuna + MLflow registry
-│       └── monitor.py            # Drift detection: Evidently data drift + regression reports
+│       └── monitor.py            # Drift detection + auto-retraining on drift threshold breach
 ├── streamlit_app/
 │   └── app.py                    # Dashboard: forecast, accuracy, features, drift
 ├── scripts/
@@ -210,3 +213,6 @@ Runs 25 tests covering:
 - **Two explicit run modes** — `local-*` targets run everything in the venv; `docker-*` targets run everything in containers. Both modes share `./data/` (raw data, features, drift reports). MLflow storage is separate: local mode writes to `./mlflow_data/` on the host; Docker mode uses a named Docker volume. Run `local-*` or `docker-*` targets consistently within a workflow. MLflow uses `--serve-artifacts` so artifact URIs are proxy-relative, never tied to an absolute path.
 - **Per-service Docker images** — each service installs only the dependencies it needs (`docker/Dockerfile.*` + `docker/requirements-*.txt`). The serving image excludes training packages (optuna, scikit-learn, prefect, evidently); the monitoring image excludes all ML packages.
 - **Versioned features** — Parquet files are timestamped for reproducibility.
+- **Closed monitoring loop** — every `/predict` response is logged to a `predictions` table in DuckDB. The monitoring workflow inner-joins this table with actual demand to compute real prediction error, replacing a crude lag-feature proxy. Drift reports are only generated once ≥48 matched rows accumulate.
+- **Auto-retraining on drift** — when the drifted-feature share exceeds 30%, the monitor writes `data/retrain_needed` and attempts `run_training(use_tuning=False)` directly (local mode). In Docker mode the container exits cleanly and the Makefile reads the flag file to invoke `docker-train`, clearing it only on success.
+- **Dynamic model loading** — the API and dashboard always load the highest registered version from the MLflow model registry (`search_model_versions` + `max(version)`), so retraining automatically promotes the new model without any config change.

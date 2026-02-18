@@ -3,11 +3,10 @@
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
-from pathlib import Path
 
 import mlflow
-import xgboost as xgb
 from fastapi import FastAPI, HTTPException
+from mlflow.tracking import MlflowClient
 from pydantic import BaseModel, Field
 
 from src.config import settings
@@ -26,29 +25,41 @@ def load_model():
 
     mlflow.set_tracking_uri(settings.MLFLOW_TRACKING_URI)
 
+    # 1. Try latest version from the model registry
     try:
-        _model = mlflow.xgboost.load_model("models:/energy_demand_xgboost/1")
-        logger.info("Loaded model from MLflow registry")
+        client = MlflowClient()
+        versions = client.search_model_versions("name='energy_demand_xgboost'")
+        if versions:
+            latest = max(versions, key=lambda v: int(v.version))
+            _model = mlflow.xgboost.load_model(
+                f"models:/energy_demand_xgboost/{latest.version}"
+            )
+            logger.info(
+                "Loaded model version %s from MLflow registry", latest.version
+            )
+            return
     except Exception as e:
-        logger.warning("Could not load from registry: %s — trying latest run", e)
-        try:
-            experiment = mlflow.get_experiment_by_name("energy_grid_forecast")
-            if experiment:
-                runs = mlflow.search_runs(
-                    experiment_ids=[experiment.experiment_id],
-                    filter_string="tags.model_type = 'xgboost_tuned'",
-                    order_by=["start_time DESC"],
-                    max_results=1,
-                )
-                if not runs.empty:
-                    run_id = runs.iloc[0]["run_id"]
-                    _model = mlflow.xgboost.load_model(f"runs:/{run_id}/model")
-                    logger.info("Loaded model from run %s", run_id)
-                    return
-        except Exception as e2:
-            logger.warning("Run fallback failed: %s", e2)
+        logger.warning("Registry load failed: %s — trying latest run", e)
 
-        raise RuntimeError("No trained model found. Run: make train")
+    # 2. Fallback: most recent run tagged xgboost_tuned
+    try:
+        experiment = mlflow.get_experiment_by_name("energy_grid_forecast")
+        if experiment:
+            runs = mlflow.search_runs(
+                experiment_ids=[experiment.experiment_id],
+                filter_string="tags.model_type = 'xgboost_tuned'",
+                order_by=["start_time DESC"],
+                max_results=1,
+            )
+            if not runs.empty:
+                run_id = runs.iloc[0]["run_id"]
+                _model = mlflow.xgboost.load_model(f"runs:/{run_id}/model")
+                logger.info("Loaded model from run %s", run_id)
+                return
+    except Exception as e2:
+        logger.warning("Run fallback failed: %s", e2)
+
+    raise RuntimeError("No trained model found. Run: make train")
 
 
 @asynccontextmanager

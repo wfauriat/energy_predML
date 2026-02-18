@@ -9,7 +9,7 @@ import pandas as pd
 from src.data.store import load_demand
 from src.features.lag import add_lag_features
 from src.features.temporal import add_temporal_features
-from src.models.xgboost_model import NON_FEATURE_COLS
+from src.features.pipeline import NON_FEATURE_COLS
 
 logger = logging.getLogger(__name__)
 

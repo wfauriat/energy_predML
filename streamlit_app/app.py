@@ -38,23 +38,36 @@ def load_model():
 
     mlflow.set_tracking_uri(settings.MLFLOW_TRACKING_URI)
 
+    from mlflow.tracking import MlflowClient
+
+    # 1. Try latest version from the model registry
     try:
-        return mlflow.xgboost.load_model("models:/energy_demand_xgboost/1")
+        client = MlflowClient()
+        versions = client.search_model_versions("name='energy_demand_xgboost'")
+        if versions:
+            latest = max(versions, key=lambda v: int(v.version))
+            return mlflow.xgboost.load_model(
+                f"models:/energy_demand_xgboost/{latest.version}"
+            )
     except Exception:
-        try:
-            experiment = mlflow.get_experiment_by_name("energy_grid_forecast")
-            if experiment:
-                runs = mlflow.search_runs(
-                    experiment_ids=[experiment.experiment_id],
-                    filter_string="tags.model_type = 'xgboost_tuned'",
-                    order_by=["start_time DESC"],
-                    max_results=1,
-                )
-                if not runs.empty:
-                    run_id = runs.iloc[0]["run_id"]
-                    return mlflow.xgboost.load_model(f"runs:/{run_id}/model")
-        except Exception:
-            pass
+        pass
+
+    # 2. Fallback: most recent run tagged xgboost_tuned
+    try:
+        experiment = mlflow.get_experiment_by_name("energy_grid_forecast")
+        if experiment:
+            runs = mlflow.search_runs(
+                experiment_ids=[experiment.experiment_id],
+                filter_string="tags.model_type = 'xgboost_tuned'",
+                order_by=["start_time DESC"],
+                max_results=1,
+            )
+            if not runs.empty:
+                run_id = runs.iloc[0]["run_id"]
+                return mlflow.xgboost.load_model(f"runs:/{run_id}/model")
+    except Exception:
+        pass
+
     return None
 
 

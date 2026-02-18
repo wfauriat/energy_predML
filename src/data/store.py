@@ -1,6 +1,7 @@
-"""DuckDB storage layer for demand data."""
+"""DuckDB storage layer for demand data and logged predictions."""
 
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
@@ -21,9 +22,19 @@ CREATE TABLE IF NOT EXISTS demand (
 )
 """
 
+CREATE_PREDICTIONS_SQL = """
+CREATE TABLE IF NOT EXISTS predictions (
+    timestamp    TIMESTAMPTZ NOT NULL,
+    region       VARCHAR     NOT NULL,
+    demand_mwh   DOUBLE      NOT NULL,
+    predicted_at TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (timestamp, region)
+)
+"""
+
 
 def get_connection(read_only: bool = False) -> duckdb.DuckDBPyConnection:
-    """Get a DuckDB connection, creating the database and table if needed.
+    """Get a DuckDB connection, creating the database and tables if needed.
 
     Args:
         read_only: Open in read-only mode (allows concurrent readers).
@@ -35,6 +46,7 @@ def get_connection(read_only: bool = False) -> duckdb.DuckDBPyConnection:
     conn = duckdb.connect(str(DB_PATH), read_only=effective_read_only)
     if not effective_read_only:
         conn.execute(CREATE_TABLE_SQL)
+        conn.execute(CREATE_PREDICTIONS_SQL)
     return conn
 
 
@@ -112,4 +124,71 @@ def load_demand(
     conn.close()
 
     logger.info("Loaded %d rows from DuckDB", len(df))
+    return df
+
+
+def log_prediction(timestamp: datetime, region: str, demand_mwh: float) -> None:
+    """Upsert a prediction into the predictions table.
+
+    Overwrites an existing row if the same (timestamp, region) already exists,
+    keeping only the most recent prediction for each slot.
+
+    Args:
+        timestamp: Target hour being predicted.
+        region: Grid region code.
+        demand_mwh: Predicted demand in MWh.
+    """
+    ts_utc = pd.Timestamp(timestamp, tz="UTC") if getattr(timestamp, "tzinfo", None) is None \
+        else pd.Timestamp(timestamp).tz_convert("UTC")
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO predictions (timestamp, region, demand_mwh, predicted_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (timestamp, region) DO UPDATE SET
+            demand_mwh   = excluded.demand_mwh,
+            predicted_at = excluded.predicted_at
+        """,
+        [ts_utc, region, round(demand_mwh, 1), datetime.now(UTC)],
+    )
+    conn.close()
+    logger.debug("Logged prediction: %s [%s] = %.1f MWh", ts_utc, region, demand_mwh)
+
+
+def load_predictions(
+    region: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+) -> pd.DataFrame:
+    """Load logged predictions from DuckDB with optional filters.
+
+    Args:
+        region: Filter by region code.
+        start: Filter start datetime (inclusive).
+        end: Filter end datetime (inclusive).
+
+    Returns:
+        DataFrame with columns: timestamp, region, demand_mwh, predicted_at.
+    """
+    conn = get_connection(read_only=True)
+
+    query = "SELECT timestamp, region, demand_mwh, predicted_at FROM predictions WHERE 1=1"
+    params: list = []
+
+    if region:
+        query += " AND region = ?"
+        params.append(region)
+    if start:
+        query += " AND timestamp >= ?"
+        params.append(start)
+    if end:
+        query += " AND timestamp <= ?"
+        params.append(end)
+
+    query += " ORDER BY timestamp"
+
+    df = conn.execute(query, params).fetchdf()
+    conn.close()
+
+    logger.info("Loaded %d predictions from DuckDB", len(df))
     return df

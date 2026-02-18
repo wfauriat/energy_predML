@@ -86,6 +86,7 @@ def predict_demand(
     model,
     target_ts: datetime,
     region: str,
+    model_rmse: float | None = None,
 ) -> dict:
     """Generate a demand prediction for a specific timestamp.
 
@@ -93,6 +94,10 @@ def predict_demand(
         model: Trained model with a .predict() method.
         target_ts: Timestamp to predict for.
         region: Grid region code.
+        model_rmse: Validation RMSE from the training run. When provided,
+            the 95% confidence interval is computed as prediction ± 1.96 × RMSE
+            (Gaussian error assumption). Falls back to ±4% of the prediction
+            when not available.
 
     Returns:
         Dictionary with prediction results.
@@ -100,11 +105,14 @@ def predict_demand(
     features = generate_features_for_timestamp(target_ts, region)
     prediction = float(model.predict(features.values)[0])
 
-    # Simple confidence interval (±2 * typical error)
-    # This is a rough estimate; proper intervals need quantile regression
-    typical_error = prediction * 0.02  # ~2% MAPE from training
-    lower = prediction - 2 * typical_error
-    upper = prediction + 2 * typical_error
+    # Confidence interval: ±1.96 × val RMSE gives ~95% coverage under Gaussian errors.
+    # Falls back to a naive ±4% of the prediction when the RMSE is unavailable.
+    if model_rmse is not None:
+        margin = 1.96 * model_rmse
+    else:
+        margin = prediction * 0.04
+    lower = prediction - margin
+    upper = prediction + margin
 
     result = {
         "timestamp": target_ts.isoformat(),

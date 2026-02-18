@@ -15,9 +15,6 @@ from src.monitoring.drift import (
 
 logger = logging.getLogger(__name__)
 
-# Fraction of drifted features that triggers a retraining alert
-DRIFT_THRESHOLD = 0.3
-
 
 def _load_matched_predictions(region: str, min_rows: int = 48) -> pd.DataFrame | None:
     """Inner-join logged predictions with actual demand on (timestamp, region).
@@ -142,14 +139,14 @@ def run_monitoring(
 
     # 3. Check if retraining is needed
     drift_share = drift_metrics.get("drift_share", 0)
-    needs_retraining = drift_share > DRIFT_THRESHOLD
+    needs_retraining = drift_share > settings.DRIFT_THRESHOLD
     result["needs_retraining"] = needs_retraining
 
     if not needs_retraining:
         logger.info(
             "No significant drift: %.0f%% of features drifted (threshold: %.0f%%)",
             drift_share * 100,
-            DRIFT_THRESHOLD * 100,
+            settings.DRIFT_THRESHOLD * 100,
         )
         return result
 
@@ -157,7 +154,7 @@ def run_monitoring(
     logger.warning(
         "DRIFT DETECTED: %.0f%% of features drifted (threshold: %.0f%%).",
         drift_share * 100,
-        DRIFT_THRESHOLD * 100,
+        settings.DRIFT_THRESHOLD * 100,
     )
     RETRAIN_FLAG_PATH.touch()
     logger.info("Retrain flag written to %s", RETRAIN_FLAG_PATH)

@@ -15,13 +15,24 @@ from src.serving.predict import predict_demand
 
 logger = logging.getLogger(__name__)
 
-# Global model reference
+# Global model reference and its validation RMSE (used for confidence intervals)
 _model = None
+_model_rmse: float | None = None
+
+
+def _fetch_run_rmse(run_id: str) -> float | None:
+    """Return the validation RMSE logged with a training run, or None on failure."""
+    try:
+        rmse = mlflow.get_run(run_id).data.metrics.get("rmse")
+        return float(rmse) if rmse is not None else None
+    except Exception as e:
+        logger.warning("Could not fetch RMSE from run %s: %s", run_id, e)
+        return None
 
 
 def load_model():
     """Load the latest registered model from MLflow."""
-    global _model
+    global _model, _model_rmse
 
     mlflow.set_tracking_uri(settings.MLFLOW_TRACKING_URI)
 
@@ -34,8 +45,11 @@ def load_model():
             _model = mlflow.xgboost.load_model(
                 f"models:/energy_demand_xgboost/{latest.version}"
             )
+            _model_rmse = _fetch_run_rmse(latest.run_id)
             logger.info(
-                "Loaded model version %s from MLflow registry", latest.version
+                "Loaded model version %s from MLflow registry (val RMSE=%.1f)",
+                latest.version,
+                _model_rmse or 0,
             )
             return
     except Exception as e:
@@ -54,7 +68,10 @@ def load_model():
             if not runs.empty:
                 run_id = runs.iloc[0]["run_id"]
                 _model = mlflow.xgboost.load_model(f"runs:/{run_id}/model")
-                logger.info("Loaded model from run %s", run_id)
+                _model_rmse = _fetch_run_rmse(run_id)
+                logger.info(
+                    "Loaded model from run %s (val RMSE=%.1f)", run_id, _model_rmse or 0
+                )
                 return
     except Exception as e2:
         logger.warning("Run fallback failed: %s", e2)
@@ -133,6 +150,7 @@ async def predict(request: PredictRequest):
             model=_model,
             target_ts=request.timestamp,
             region=request.region,
+            model_rmse=_model_rmse,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

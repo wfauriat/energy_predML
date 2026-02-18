@@ -31,8 +31,10 @@ def api_client(tmp_duckdb, seed_demand):
     with patch("src.serving.api.load_model"):
         with TestClient(app) as client:
             api_module._model = _mock_model()
+            api_module._model_rmse = None  # no RMSE available → fallback CI
             yield client
     api_module._model = None
+    api_module._model_rmse = None
 
 
 @pytest.fixture
@@ -41,8 +43,10 @@ def api_client_no_data(tmp_duckdb):
     with patch("src.serving.api.load_model"):
         with TestClient(app) as client:
             api_module._model = _mock_model()
+            api_module._model_rmse = None
             yield client
     api_module._model = None
+    api_module._model_rmse = None
 
 
 # ---------------------------------------------------------------------------

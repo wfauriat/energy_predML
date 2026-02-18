@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     EIA_API_KEY: str = ""
     MLFLOW_TRACKING_URI: str = "http://localhost:5000"
     DEFAULT_REGION: str = "CISO"
+    DRIFT_THRESHOLD: float = 0.3  # fraction of drifted features that triggers retraining
 
     model_config = {
         "env_file": PROJECT_ROOT / ".env",

@@ -553,11 +553,11 @@ All MVP phases complete. One optional item (alerting) intentionally deferred.
 - **RMSE-based confidence intervals** — replaced hardcoded ±2% with `±1.96 × val RMSE` from the model's MLflow run; falls back to ±4% when metric unavailable (`src/serving/predict.py`)
 - **Configurable drift threshold** — `DRIFT_THRESHOLD` moved from hardcoded constant to `Settings` in `config.py`; set via `.env` without touching source (`src/config.py`, `src/workflows/monitor.py`)
 - **Integration tests** — 24 tests covering data pipeline, feature pipeline, API endpoints, and monitoring workflow; `tmp_duckdb` fixture isolates every test from production DB
+- **CI/CD (GitHub Actions)** — `.github/workflows/test.yml` runs all 49 tests on every push and PR to main (Python 3.12, pip cache); status badge on README; `pytest` and `httpx` added to `requirements.txt`
 
 ### Remaining — prioritized
 
 #### High value, low effort
-- **CI/CD (GitHub Actions)** — `.github/workflows/test.yml` running `make test` on every PR. Highest portfolio signal: shows the 49 tests are enforced, not just present. Also add Docker image build on merge to main.
 - **Scheduled orchestration** — Wire Prefect schedules so ingestion runs daily at 6AM UTC and monitoring runs weekly. Transforms the project from "pipeline that can run" to "pipeline that does run".
 
 #### Meaningful model improvement

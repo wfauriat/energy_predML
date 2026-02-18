@@ -4,14 +4,16 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - ./mlruns:${PWD}/mlruns
+      - ./mlflow_data:/app/mlflow_data
     user: "${UID:-1000}:${GID:-1000}"
     command: >
       mlflow server
       --host 0.0.0.0
       --port 5000
-      --backend-store-uri ${PWD}/mlruns
-      --default-artifact-root ${PWD}/mlruns
+      --backend-store-uri sqlite:////app/mlflow_data/mlflow.db
+      --artifacts-destination /app/mlflow_data/artifacts
+      --serve-artifacts
+      --allowed-hosts mlflow,mlflow:5000,localhost,localhost:5000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 5s
@@ -25,11 +27,10 @@ services:
       - "8000:8000"
     volumes:
       - ./data:/app/data
-      - ./mlruns:${PWD}/mlruns
     user: "${UID:-1000}:${GID:-1000}"
     env_file: .env
     environment:
-      - MLFLOW_TRACKING_URI=${PWD}/mlruns
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
     depends_on:
       mlflow:
         condition: service_healthy
@@ -40,12 +41,11 @@ services:
       - "8501:8501"
     volumes:
       - ./data:/app/data
-      - ./mlruns:${PWD}/mlruns
       - ./streamlit_app:/app/streamlit_app
     user: "${UID:-1000}:${GID:-1000}"
     env_file: .env
     environment:
-      - MLFLOW_TRACKING_URI=${PWD}/mlruns
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
     command: >
       streamlit run streamlit_app/app.py
       --server.port 8501
@@ -53,5 +53,3 @@ services:
     depends_on:
       mlflow:
         condition: service_healthy
-      api:
-        condition: service_started

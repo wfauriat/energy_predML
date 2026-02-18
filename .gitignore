@@ -20,6 +20,7 @@ venv/
 # MLflow
 mlflow/
 mlruns/
+/mlflow_data/
 
 # Prefect
 prefect/

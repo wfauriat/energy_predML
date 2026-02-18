@@ -32,22 +32,17 @@ def run_training(
         n_trials: Number of Optuna trials if tuning.
         rebuild_features: If True, rebuild features from DuckDB instead of loading Parquet.
     """
-    # Set up MLflow (use local file store if server URI fails)
+    # Set up MLflow — requires the server to be running
     tracking_uri = settings.MLFLOW_TRACKING_URI
     if tracking_uri.startswith("http"):
         try:
             import requests as _req
-            _req.get(tracking_uri, timeout=2)
-        except Exception:
-            from src.config import PROJECT_ROOT
-            tracking_uri = str(PROJECT_ROOT / "mlruns")
-            logger.warning(
-                "MLflow server not reachable at %s. Falling back to local store: %s. "
-                "Models trained in this mode will NOT be loadable from Docker containers. "
-                "Run 'docker compose up -d mlflow' before training for full compatibility.",
-                settings.MLFLOW_TRACKING_URI,
-                tracking_uri,
-            )
+            _req.get(tracking_uri, timeout=3)
+        except Exception as exc:
+            raise RuntimeError(
+                f"MLflow server not reachable at {tracking_uri}. "
+                "Start it first with: docker compose up -d mlflow"
+            ) from exc
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(EXPERIMENT_NAME)
 

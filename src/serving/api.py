@@ -10,7 +10,7 @@ import xgboost as xgb
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from src.config import PROJECT_ROOT, settings
+from src.config import settings
 from src.serving.predict import predict_demand
 
 logger = logging.getLogger(__name__)
@@ -23,23 +23,13 @@ def load_model():
     """Load the latest registered model from MLflow."""
     global _model
 
-    # Try MLflow registry first
-    tracking_uri = settings.MLFLOW_TRACKING_URI
-    if tracking_uri.startswith("http"):
-        try:
-            import requests
-            requests.get(tracking_uri, timeout=2)
-        except Exception:
-            tracking_uri = str(PROJECT_ROOT / "mlruns")
-
-    mlflow.set_tracking_uri(tracking_uri)
+    mlflow.set_tracking_uri(settings.MLFLOW_TRACKING_URI)
 
     try:
         _model = mlflow.xgboost.load_model("models:/energy_demand_xgboost/1")
         logger.info("Loaded model from MLflow registry")
     except Exception as e:
-        logger.warning("Could not load from MLflow registry: %s", e)
-        # Fallback: find latest run with a logged model
+        logger.warning("Could not load from registry: %s — trying latest run", e)
         try:
             experiment = mlflow.get_experiment_by_name("energy_grid_forecast")
             if experiment:
@@ -52,12 +42,12 @@ def load_model():
                 if not runs.empty:
                     run_id = runs.iloc[0]["run_id"]
                     _model = mlflow.xgboost.load_model(f"runs:/{run_id}/model")
-                    logger.info("Loaded model from MLflow run %s", run_id)
+                    logger.info("Loaded model from run %s", run_id)
                     return
         except Exception as e2:
-            logger.warning("MLflow fallback failed: %s", e2)
+            logger.warning("Run fallback failed: %s", e2)
 
-        raise RuntimeError("No trained model found. Run training first: python -m src.workflows.train")
+        raise RuntimeError("No trained model found. Run: make train")
 
 
 @asynccontextmanager

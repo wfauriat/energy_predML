@@ -13,6 +13,7 @@ fetch-data:
 	.venv/bin/python -m src.workflows.ingest
 
 mlflow-server:
+	mkdir -p mlflow_data
 	docker compose up -d --wait mlflow
 
 train: mlflow-server
@@ -21,10 +22,10 @@ train: mlflow-server
 monitor:
 	.venv/bin/python -m src.workflows.monitor
 
-serve:
+serve: mlflow-server
 	.venv/bin/uvicorn src.serving.api:app --port 8000
 
-dashboard:
+dashboard: mlflow-server
 	.venv/bin/streamlit run streamlit_app/app.py
 
 serve-docker:
@@ -34,5 +35,5 @@ test:
 	.venv/bin/python -m pytest tests/ -v
 
 clean:
-	rm -rf data/ mlruns/ __pycache__ .pytest_cache
+	rm -rf data/ mlruns/ mlflow_data/ __pycache__ .pytest_cache
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

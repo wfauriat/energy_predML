@@ -11,7 +11,7 @@ import streamlit as st
 # Ensure src is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.config import DATA_DIR, PROJECT_ROOT, settings
+from src.config import DATA_DIR, settings
 from src.data.store import load_demand
 from src.features.pipeline import build_features, get_latest_features
 from src.models.xgboost_model import NON_FEATURE_COLS, get_feature_columns
@@ -36,14 +36,7 @@ def load_model():
     """Load the trained XGBoost model from MLflow."""
     import mlflow
 
-    tracking_uri = settings.MLFLOW_TRACKING_URI
-    if tracking_uri.startswith("http"):
-        try:
-            import requests
-            requests.get(tracking_uri, timeout=2)
-        except Exception:
-            tracking_uri = str(PROJECT_ROOT / "mlruns")
-    mlflow.set_tracking_uri(tracking_uri)
+    mlflow.set_tracking_uri(settings.MLFLOW_TRACKING_URI)
 
     try:
         return mlflow.xgboost.load_model("models:/energy_demand_xgboost/1")

@@ -52,17 +52,20 @@ local-monitor:
 
 # ── DOCKER MODE ────────────────────────────────────────────────────────────
 # Everything runs inside Docker containers. MLflow, API, and Streamlit are all
-# containerized. Data and model artifacts are persisted on the host via volumes.
+# containerized.
+# - Raw data and features (./data/) are stored on the host as a bind mount.
+# - MLflow DB and model artifacts are stored in a Docker-managed named volume
+#   (mlflow_data). This is separate from the local mode's ./mlflow_data/ dir.
 #
 # Typical workflow:
 #   make docker-fetch && make docker-train && make docker-serve
 
 docker-fetch:
-	mkdir -p data mlflow_data
+	mkdir -p data
 	docker compose run --rm ingest
 
 docker-train:
-	mkdir -p data mlflow_data
+	mkdir -p data
 	docker compose up -d --wait mlflow
 	docker compose run --rm train
 	docker compose stop mlflow
@@ -76,6 +79,6 @@ test:
 	.venv/bin/python -m pytest tests/ -v
 
 clean:
-	docker compose down 2>/dev/null || true
+	docker compose down -v 2>/dev/null || true
 	rm -rf data/ mlruns/ mlflow_data/ __pycache__ .pytest_cache
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

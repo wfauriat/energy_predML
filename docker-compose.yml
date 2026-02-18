@@ -1,11 +1,10 @@
 services:
   mlflow:
-    build: .
+    image: ghcr.io/mlflow/mlflow:v3.9.0
     ports:
       - "5000:5000"
     volumes:
-      - ./mlflow_data:/app/mlflow_data
-    user: "${UID:-1000}:${GID:-1000}"
+      - mlflow_data:/app/mlflow_data
     command: >
       mlflow server
       --host 0.0.0.0
@@ -74,7 +73,9 @@ services:
     profiles: ["tools"]
     volumes:
       - ./data:/app/data
-      - ./mlflow_data:/app/mlflow_data
+      # mlflow_data is NOT mounted here: artifacts are uploaded via the MLflow
+      # HTTP proxy (--serve-artifacts), so the train container never writes to
+      # the volume directly.
     user: "${UID:-1000}:${GID:-1000}"
     env_file: .env
     environment:
@@ -83,3 +84,9 @@ services:
     depends_on:
       mlflow:
         condition: service_healthy
+
+volumes:
+  mlflow_data:
+    # Docker-managed volume for the MLflow SQLite DB and model artifacts.
+    # Used exclusively by the Docker workflow (docker-train / docker-serve).
+    # The local workflow writes to ./mlflow_data/ on the host instead.

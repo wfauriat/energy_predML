@@ -78,7 +78,13 @@ Services (Docker mode):
 - **FastAPI** — `http://localhost:8000` (docs at `/docs`)
 - **Streamlit** — `http://localhost:8501`
 
-Persistent data (`./data/` and `./mlflow_data/`) is stored on the host and shared between both modes — you can train locally and serve via Docker, or vice versa.
+Raw data and features (`./data/`) are stored on the host as a bind mount and shared between both modes.
+
+MLflow storage differs per mode:
+- **Local mode** writes to `./mlflow_data/` on the host.
+- **Docker mode** uses a Docker-managed named volume (`mlflow_data`), which keeps the MLflow server running as root without permission issues and avoids the `mkdir -p` workaround.
+
+The two modes do not share trained models — run `local-*` or `docker-*` targets consistently within a workflow.
 
 ## Project Structure
 

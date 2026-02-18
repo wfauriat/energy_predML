@@ -123,7 +123,13 @@ energy_predML/
 │   └── app.py                    # Dashboard: forecast, accuracy, features, drift
 ├── scripts/
 │   └── compare_models.py         # 1-step vs 24h recursive forecast comparison
-├── tests/                        # 25 unit tests (features, data, models)
+├── tests/
+│   ├── conftest.py               # Shared fixtures: tmp_duckdb, seed_demand
+│   ├── test_data/                # EIA client, validation, pipeline integration
+│   ├── test_features/            # Temporal, lag, pipeline integration
+│   ├── test_models/              # Evaluation metrics
+│   ├── test_serving/             # FastAPI endpoint integration
+│   └── test_monitoring/          # Drift detection + retrain flag integration
 ├── docker/
 │   ├── Dockerfile.ingest         # Data ingestion image (prefect + data stack only)
 │   ├── Dockerfile.train          # Model training image (xgboost + optuna + mlflow)
@@ -198,12 +204,29 @@ Evaluated on temporal validation split (last 20% of data):
 make test
 ```
 
-Runs 25 tests covering:
+Runs 49 tests across two layers:
+
+**Unit tests (25)** — single functions in isolation with dependencies mocked:
 - EIA API client (mocked HTTP responses, pagination)
 - Data validation (schema, null handling, sorting)
 - Temporal features (ranges, weekend detection, cyclical bounds)
 - Lag features (correctness, NaN warm-up, no data leakage)
 - Evaluation metrics (perfect predictions, known errors, MAPE)
+
+**Integration tests (24)** — multiple real components wired together against an isolated temp DuckDB; no running services required:
+- Data pipeline: fetch → validate → store → load roundtrip, idempotency, region filtering, prediction log/overwrite
+- Feature pipeline: `build_features` end-to-end, no-null guarantee after warm-up, lag-24h leakage check
+- API (`/health`, `/predict`): response shape, prediction logged to DB, 400 on missing history, 503 on missing model
+- Monitoring: no-drift/no-flag, drift → flag written, regression report skipped with <48 predictions, early return on stale cutoff
+
+To run only the integration tests:
+
+```bash
+.venv/bin/python -m pytest tests/test_data/test_pipeline_integration.py \
+                           tests/test_features/test_pipeline_integration.py \
+                           tests/test_serving/ \
+                           tests/test_monitoring/ -v
+```
 
 ## Key Design Decisions
 

@@ -11,6 +11,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from src.config import settings
+from src.data.store import log_prediction
 from src.serving.predict import predict_demand
 
 logger = logging.getLogger(__name__)
@@ -122,9 +123,19 @@ async def predict(request: PredictRequest):
             target_ts=request.timestamp,
             region=request.region,
         )
-        return PredictResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error("Prediction failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+
+    try:
+        log_prediction(
+            timestamp=request.timestamp,
+            region=request.region,
+            demand_mwh=result["demand_mwh"],
+        )
+    except Exception as log_err:
+        logger.warning("Failed to log prediction: %s", log_err)
+
+    return PredictResponse(**result)

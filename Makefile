@@ -75,6 +75,13 @@ docker-serve:
 
 docker-monitor:
 	docker compose run --rm monitor
+	@if [ -f data/retrain_needed ]; then \
+		echo "Drift detected — triggering retraining..."; \
+		$(MAKE) docker-train; \
+		rm -f data/retrain_needed; \
+	else \
+		echo "No drift detected, no retraining needed."; \
+	fi
 
 # ── UTILITIES ──────────────────────────────────────────────────────────────
 

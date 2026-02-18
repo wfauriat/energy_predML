@@ -14,6 +14,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 PREDICTIONS_DIR = DATA_DIR / "predictions"
+RETRAIN_FLAG_PATH = DATA_DIR / "retrain_needed"
 
 
 class Settings(BaseSettings):

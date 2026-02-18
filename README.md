@@ -97,7 +97,7 @@ Drift reports (`./data/drift_reports/`) are written to the shared `./data/` bind
 ```
 energy_predML/
 ├── src/
-│   ├── config.py                 # Pydantic settings, path constants
+│   ├── config.py                 # Pydantic settings, path constants; DRIFT_THRESHOLD configurable via env
 │   ├── data/
 │   │   ├── fetch.py              # EIA API client with pagination
 │   │   ├── validate.py           # Schema validation
@@ -237,6 +237,6 @@ To run only the integration tests:
 - **Per-service Docker images** — each service installs only the dependencies it needs (`docker/Dockerfile.*` + `docker/requirements-*.txt`). The serving image excludes training packages (optuna, scikit-learn, prefect, evidently); the monitoring image excludes all ML packages.
 - **Versioned features** — Parquet files are timestamped for reproducibility.
 - **Closed monitoring loop** — every `/predict` response is logged to a `predictions` table in DuckDB. The monitoring workflow inner-joins this table with actual demand to compute real prediction error, replacing a crude lag-feature proxy. Drift reports are only generated once ≥48 matched rows accumulate.
-- **Auto-retraining on drift** — when the drifted-feature share exceeds 30%, the monitor writes `data/retrain_needed` and attempts `run_training(use_tuning=False)` directly (local mode). In Docker mode the container exits cleanly and the Makefile reads the flag file to invoke `docker-train`, clearing it only on success.
-- **Dynamic model loading** — the API and dashboard always load the highest registered version from the MLflow model registry (`search_model_versions` + `max(version)`), so retraining automatically promotes the new model without any config change.
+- **Configurable drift threshold** — the fraction of drifted features that triggers retraining is set via `DRIFT_THRESHOLD` in `.env` (default `0.3`). When the share exceeds the threshold, the monitor writes `data/retrain_needed` and attempts `run_training(use_tuning=False)` directly (local mode). In Docker mode the container exits cleanly and the Makefile reads the flag file to invoke `docker-train`, clearing it only on success.
+- **Dynamic model loading** — the API always loads the highest registered version from the MLflow model registry (`search_model_versions` + `max(version)`), so retraining automatically promotes the new model without any config change. At startup the serving layer also fetches the model's logged `rmse` metric from its MLflow run and uses it to compute confidence intervals as `prediction ± 1.96 × RMSE` (~95% Gaussian coverage), falling back to ±4% of the prediction if the metric is unavailable.
 - **Cutoff-based drift reference** — training writes the DuckDB max timestamp to `data/train_cutoff.txt`. The monitor uses this as the split point: reference = everything the model was trained on, current = data that arrived after training. Running the monitor immediately after a retrain correctly reports no drift (zero new rows); drift only fires again once a daily fetch brings in genuinely new data. Falls back to a fixed 80/20 split on the first run before any cutoff exists.

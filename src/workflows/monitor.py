@@ -3,6 +3,7 @@
 import logging
 
 import pandas as pd
+from prefect import flow
 
 from src.config import RETRAIN_FLAG_PATH, TRAIN_CUTOFF_PATH, settings
 from src.data.store import load_demand, load_predictions
@@ -47,6 +48,7 @@ def _load_matched_predictions(region: str, min_rows: int = 48) -> pd.DataFrame |
     })
 
 
+@flow(name="drift-monitoring")
 def run_monitoring(
     train_ratio: float = 0.8,
     region: str | None = None,

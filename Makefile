@@ -1,5 +1,5 @@
 .PHONY: setup test clean \
-        local-mlflow local-fetch local-train local-serve local-dashboard local-monitor \
+        local-mlflow local-fetch local-train local-serve local-dashboard local-monitor local-scheduler \
         docker-fetch docker-train docker-serve docker-monitor
 
 export UID := $(shell id -u)
@@ -49,6 +49,9 @@ local-dashboard:
 
 local-monitor:
 	.venv/bin/python -m src.workflows.monitor
+
+local-scheduler:
+	.venv/bin/python -m src.workflows.scheduler
 
 # ── DOCKER MODE ────────────────────────────────────────────────────────────
 # Everything runs inside Docker containers. MLflow, API, and Streamlit are all

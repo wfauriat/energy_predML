@@ -56,8 +56,9 @@ make setup
 
 ### Local Mode — everything runs in the venv, no Docker needed for individual steps
 
-MLflow must be running before training or serving. Start it in a dedicated terminal, then run the rest of the pipeline in another.
+MLflow must be running before training or serving.
 
+**Manual workflow** — run each step on demand:
 ```bash
 # terminal 1 — keep this running throughout
 make local-mlflow
@@ -67,19 +68,40 @@ make local-fetch      # fetch data from EIA API
 make local-train      # train + register model in MLflow
 make local-serve      # FastAPI on :8000
 make local-dashboard  # Streamlit on :8501 (optional third terminal)
-make local-monitor    # drift detection
+make local-monitor    # drift detection (run once manually)
+```
+
+**Scheduled workflow** — ingestion and monitoring run automatically:
+```bash
+# terminal 1
+make local-mlflow
+
+# terminal 2 — blocks; ingests daily at 06:00 UTC, monitors every Monday
+make local-scheduler
+
+# terminal 3
+make local-train      # initial training before serving
+make local-serve      # FastAPI on :8000
 ```
 
 ### Docker Mode — everything runs in containers
 
+**Manual workflow:**
 ```bash
 make docker-fetch     # ingest data (docker compose run)
 make docker-train     # train + register model (docker compose run)
 make docker-serve     # start MLflow + API + Streamlit (docker compose up)
-make docker-monitor   # drift detection (docker compose run)
+make docker-monitor   # drift detection + auto-retrain on drift (docker compose run)
 ```
 
-Services (Docker mode):
+**Scheduled workflow:**
+```bash
+make docker-train     # initial training
+make docker-scheduler # start MLflow + scheduler container in background
+make docker-serve     # start API + Streamlit alongside scheduler
+```
+
+Services:
 - **MLflow UI** — `http://localhost:5000`
 - **FastAPI** — `http://localhost:8000` (docs at `/docs`)
 - **Streamlit** — `http://localhost:8501`
@@ -120,7 +142,8 @@ energy_predML/
 │   └── workflows/
 │       ├── ingest.py             # Prefect flow: fetch -> validate -> store
 │       ├── train.py              # Training pipeline: baseline + XGBoost + Optuna + MLflow registry; writes data/train_cutoff.txt
-│       └── monitor.py            # Drift detection + auto-retraining on drift threshold breach
+│       ├── monitor.py            # Drift detection + auto-retraining on drift threshold breach
+│       └── scheduler.py          # Prefect serve(): runs ingest daily + monitor weekly (no server required)
 ├── streamlit_app/
 │   └── app.py                    # Dashboard: forecast, accuracy, features, drift
 ├── scripts/
@@ -241,4 +264,5 @@ To run only the integration tests:
 - **Closed monitoring loop** — every `/predict` response is logged to a `predictions` table in DuckDB. The monitoring workflow inner-joins this table with actual demand to compute real prediction error, replacing a crude lag-feature proxy. Drift reports are only generated once ≥48 matched rows accumulate.
 - **Configurable drift threshold** — the fraction of drifted features that triggers retraining is set via `DRIFT_THRESHOLD` in `.env` (default `0.3`). When the share exceeds the threshold, the monitor writes `data/retrain_needed` and attempts `run_training(use_tuning=False)` directly (local mode). In Docker mode the container exits cleanly and the Makefile reads the flag file to invoke `docker-train`, clearing it only on success.
 - **Dynamic model loading** — the API always loads the highest registered version from the MLflow model registry (`search_model_versions` + `max(version)`), so retraining automatically promotes the new model without any config change. At startup the serving layer also fetches the model's logged `rmse` metric from its MLflow run and uses it to compute confidence intervals as `prediction ± 1.96 × RMSE` (~95% Gaussian coverage), falling back to ±4% of the prediction if the metric is unavailable.
+- **Scheduled orchestration** — `src/workflows/scheduler.py` uses Prefect `serve()` to run both flows on a schedule without a Prefect server: `data-ingestion` fires daily at 06:00 UTC, `drift-monitoring` fires every Monday at 06:00 UTC. The scheduler is a single long-lived process (`make local-scheduler`) or a Docker service (`make docker-scheduler`). Both modes share the same `./data/` bind mount so data written by the scheduler is immediately visible to the API and dashboard.
 - **Cutoff-based drift reference** — training writes the DuckDB max timestamp to `data/train_cutoff.txt`. The monitor uses this as the split point: reference = everything the model was trained on, current = data that arrived after training. Running the monitor immediately after a retrain correctly reports no drift (zero new rows); drift only fires again once a daily fetch brings in genuinely new data. Falls back to a fixed 80/20 split on the first run before any cutoff exists.

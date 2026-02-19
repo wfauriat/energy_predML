@@ -1,6 +1,6 @@
 .PHONY: setup test clean \
         local-mlflow local-fetch local-train local-serve local-dashboard local-monitor local-scheduler \
-        docker-fetch docker-train docker-serve docker-monitor
+        docker-fetch docker-train docker-serve docker-monitor docker-scheduler
 
 export UID := $(shell id -u)
 export GID := $(shell id -g)
@@ -17,10 +17,18 @@ setup:
 # Everything runs in the .venv Python environment on the host. No Docker needed
 # for individual steps, but MLflow must be running first (see local-mlflow).
 #
-# Typical workflow:
+# One-time / manual workflow:
 #   terminal 1: make local-mlflow
 #   terminal 2: make local-fetch && make local-train && make local-serve
 #               make local-dashboard  (optional, in a third terminal)
+#               make local-monitor    (run drift detection once manually)
+#
+# Automated / scheduled workflow (replaces manual fetch + monitor):
+#   terminal 1: make local-mlflow
+#   terminal 2: make local-scheduler   # blocks; ingests daily, monitors weekly
+#   terminal 3: make local-train       # after initial data fetch
+#               make local-serve       # FastAPI on :8000
+#               make local-dashboard   # Streamlit on :8501 (optional)
 
 local-mlflow:
 	@if curl -sf http://localhost:5000/health > /dev/null 2>&1; then \
@@ -60,8 +68,16 @@ local-scheduler:
 # - MLflow DB and model artifacts are stored in a Docker-managed named volume
 #   (mlflow_data). This is separate from the local mode's ./mlflow_data/ dir.
 #
-# Typical workflow:
+# One-time / manual workflow:
 #   make docker-fetch && make docker-train && make docker-serve
+#   make docker-monitor   (run drift detection once; auto-calls docker-train on drift)
+#
+# Automated / scheduled workflow (replaces manual fetch + monitor):
+#   make docker-train     # initial model training
+#   make docker-scheduler # starts mlflow + scheduler container in background
+#   make docker-serve     # start API + Streamlit (can run alongside scheduler)
+#   Note: when the scheduler detects drift it writes data/retrain_needed;
+#         run `make docker-train` to retrain and clear the flag manually.
 
 docker-fetch:
 	mkdir -p data
@@ -78,13 +94,11 @@ docker-serve:
 
 docker-monitor:
 	docker compose run --rm monitor
-	@if [ -f data/retrain_needed ]; then \
-		echo "Drift detected — triggering retraining..."; \
-		$(MAKE) docker-train; \
-		rm -f data/retrain_needed; \
-	else \
-		echo "No drift detected, no retraining needed."; \
-	fi
+
+docker-scheduler:
+	mkdir -p data
+	docker compose up -d --wait mlflow
+	docker compose up -d --build scheduler
 
 # ── UTILITIES ──────────────────────────────────────────────────────────────
 
